@@ -1,4 +1,4 @@
-# 🏛️ QUAST University - SaltStack Network Automation
+# QUAST University - SaltStack Network Automation
 
 [![CI/CD Pipeline](https://github.com/quast/salt-automation/actions/workflows/salt_ci_cd.yml/badge.svg)](https://github.com/quast/salt-automation/actions/workflows/salt_ci_cd.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -8,7 +8,7 @@
 
 This repository contains the complete SaltStack automation for QUAST University network infrastructure.
 
-### 📊 Statistics
+### Statistics
 - **Core Switches**: 2 (Nexus 9508 VPC)
 - **Distribution Switches**: 26 (Catalyst 9400)
 - **Access Switches**: 250 (Catalyst 9300)
@@ -16,7 +16,7 @@ This repository contains the complete SaltStack automation for QUAST University 
 - **Wireless**: 500 APs + 2 WLCs
 - **Total Ports**: 15,000+
 
-### 🚀 Quick Deploy
+### Quick Deploy
 
 ```bash
 # Clone the repository
