@@ -1,4 +1,4 @@
-name: 🧂 Salt Syntax Validation
+name: 🔧 QUAST Network Automation CI/CD
 
 on:
   push:
@@ -8,34 +8,100 @@ on:
   workflow_dispatch:
 
 jobs:
-  validate-syntax:
-    name: ✅ Validate YAML & Jinja2 Syntax
+  # ============================================================
+  # JOB 1: LINTING (Syntax Validation)
+  # ============================================================
+  lint:
+    name: 🔍 Lint & Validate Syntax
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install dependencies
         run: pip install pyyaml jinja2
-
       - name: Check YAML syntax
         run: |
-          echo "🔍 Scanning .sls files..."
           for file in $(find srv -name "*.sls" -type f 2>/dev/null); do
             python3 -c "import yaml; yaml.safe_load(open('$file'))" && echo "✅ $file" || exit 1
           done
-
       - name: Check Jinja2 syntax
         run: |
-          echo "🔍 Scanning .j2 files..."
           for file in $(find srv -name "*.j2" -type f 2>/dev/null); do
             python3 -c "from jinja2 import Template; Template(open('$file').read())" && echo "✅ $file" || exit 1
           done
 
-      - name: Success
-        run: echo "✅ All syntax checks passed!"
+  # ============================================================
+  # JOB 2: PILLAR VALIDATION (Local, no SSH needed)
+  # ============================================================
+  pillar:
+    name: 📊 Validate Pillar Data
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Salt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y salt-master salt-minion
+      - name: Test pillar compilation
+        run: |
+          sudo mkdir -p /srv/pillar
+          sudo cp -r srv/pillar/* /srv/pillar/
+          sudo salt-call --local pillar.items > /dev/null
+          echo "✅ Pillar data compiles successfully"
+
+  # ============================================================
+  # JOB 3: DRY-RUN (Requires SSH - will be skipped if no secrets)
+  # ============================================================
+  dry-run:
+    name: 🧪 Dry-Run (SSH to Salt Master)
+    runs-on: ubuntu-latest
+    needs: pillar
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup SSH key
+        if: ${{ secrets.SALT_SSH_KEY != '' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SALT_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+      - name: Sync files to Salt Master
+        if: ${{ secrets.SALT_MASTER_IP != '' }}
+        run: |
+          rsync -avz --delete srv/salt/ ${{ secrets.SALT_MASTER_IP }}:/srv/salt/
+          rsync -avz --delete srv/pillar/ ${{ secrets.SALT_MASTER_IP }}:/srv/pillar/
+      - name: Run dry-run
+        if: ${{ secrets.SALT_MASTER_IP != '' }}
+        run: |
+          ssh ${{ secrets.SALT_MASTER_IP }} "sudo salt 'quast-core-01' state.apply test=true"
+      - name: No SSH configured
+        if: ${{ secrets.SALT_MASTER_IP == '' }}
+        run: |
+          echo "⚠️ Skipping dry-run - SALT_MASTER_IP secret not configured"
+          echo "✅ Dry-run would run here in production"
+
+  # ============================================================
+  # JOB 4: Success Notification
+  # ============================================================
+  success:
+    name: ✅ All Checks Passed
+    runs-on: ubuntu-latest
+    needs: [lint, pillar]
+    if: always()
+    steps:
+      - run: |
+          echo "=========================================="
+          echo "CI/CD PIPELINE SUMMARY"
+          echo "=========================================="
+          echo "Lint: ${{ needs.lint.result }}"
+          echo "Pillar: ${{ needs.pillar.result }}"
+          echo "=========================================="
+          if [ "${{ needs.lint.result }}" = "success" ] && [ "${{ needs.pillar.result }}" = "success" ]; then
+            echo "✅ All validation checks passed!"
+          else
+            echo "❌ Some checks failed. Please fix."
+            exit 1
+          fi
