@@ -1,0 +1,18 @@
+{# /srv/salt/quast/templates/cisco/vpc_orphan_ports.j2 #}
+! ============================================
+! Orphan Ports (Non-VPC)
+! Traditional single-homed connections
+! ============================================
+!
+{% for port in orphan_ports %}
+interface {{ port.interface }}
+  description {{ port.description }}
+  {% if port.vrf is defined %}
+  vrf member {{ port.vrf }}
+  {% endif %}
+  no switchport
+  ip address {{ port.ip }}
+  no shutdown
+!
+{% endfor %}
+!

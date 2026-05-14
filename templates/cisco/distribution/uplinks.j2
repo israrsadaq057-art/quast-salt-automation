@@ -1,0 +1,22 @@
+{# /srv/salt/quast/templates/cisco/distribution/uplinks.j2 #}
+! ============================================
+! Uplinks to Core Switches
+! Total bandwidth: {{ uplinks|length * 40 }}G
+! ============================================
+!
+interface port-channel {{ port_channel_id }}
+ description *** Uplink to Core Switches ***
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40,50,100,101,200,300,301,400
+ spanning-tree portfast trunk
+!
+{% for uplink in uplinks %}
+interface {{ uplink.interface }}
+ description {{ uplink.description }}
+ channel-group {{ port_channel_id }} mode active
+ speed 40000
+ duplex full
+ no shutdown
+!
+{% endfor %}
+!

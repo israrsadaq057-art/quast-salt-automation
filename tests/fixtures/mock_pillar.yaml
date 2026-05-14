@@ -1,0 +1,48 @@
+# /srv/salt/quast/tests/fixtures/mock_pillar.yaml
+# Mock Pillar Data for CI Testing
+# Network Engineer: Israr Sadaq
+
+# This is test data - not real production values
+
+vlans:
+  10:
+    name: MGMT
+    subnet: 192.168.10.0/24
+    gateway: 192.168.10.254
+  20:
+    name: FACULTY
+    subnet: 192.168.20.0/24
+    gateway: 192.168.20.254
+  30:
+    name: STUDENTS
+    subnet: 192.168.30.0/24
+    gateway: 192.168.30.254
+
+ntp:
+  servers:
+    - 0.pool.ntp.org
+    - 1.pool.ntp.org
+  iburst: true
+
+dns:
+  servers:
+    - 8.8.8.8
+    - 8.8.4.4
+  search_domains:
+    - test.local
+
+organization:
+  name: "Test Organization"
+  domain: "test.local"
+
+core_switches:
+  test-core-01:
+    mgmt_ip: 192.168.10.1/24
+    vpc_role: primary
+    vpc_priority: 2000
+
+access_switches:
+  test-acc-01:
+    mgmt_ip: 192.168.30.1/24
+    location: "Test Lab"
+    default_vlan: 30

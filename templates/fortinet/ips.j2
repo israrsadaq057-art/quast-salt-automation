@@ -1,0 +1,22 @@
+{# /srv/salt/quast/templates/fortinet/ips.j2 #}
+! ============================================
+! IPS (Intrusion Prevention System)
+! ============================================
+
+config ips sensor
+    edit "{{ ips_sensor }}"
+        {% for signature in blocked_signatures %}
+        set entry "{{ signature }}" disable
+        {% endfor %}
+        set filter "severity:critical" action block
+        set filter "severity:high" action block
+        set filter "severity:medium" action pass
+        set filter "target:server" action block
+    next
+end
+
+config firewall profile-group
+    edit "high-security"
+        set ips-sensor "{{ ips_sensor }}"
+    next
+end

@@ -1,0 +1,19 @@
+{# /srv/salt/quast/templates/cisco/snmp.j2 #}
+! ============================================
+! SNMP Configuration
+! ============================================
+!
+snmp-server location "{{ snmp_location }}"
+snmp-server contact "{{ snmp_contact }}"
+!
+{% if snmp_version == 'v3' %}
+{% for user in snmp_users %}
+snmp-server user {{ user.name }} {{ user.name }} auth {{ user.auth_protocol }} {{ pillar['secrets']['snmp_auth_' + user.name] }} priv {{ user.priv_protocol }} {{ pillar['secrets']['snmp_priv_' + user.name] }}
+{% endfor %}
+snmp-server group netadmin v3 auth read v1default write v1default
+snmp-server view iso-view iso included
+{% endif %}
+!
+snmp-server enable traps
+snmp-server trap-source Loopback0
+!

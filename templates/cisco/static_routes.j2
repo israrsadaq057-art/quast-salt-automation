@@ -1,0 +1,12 @@
+{# /srv/salt/quast/templates/cisco/static_routes.j2 #}
+! ============================================
+! Static Routes
+! ============================================
+!
+{% for route in static_routes %}
+ip route {{ route.dest }} {{ route.mask }} {{ route.next_hop }} name {{ route.name }}
+{% endfor %}
+!
+! Management route
+ip route 0.0.0.0/0 {{ mgmt_gateway }} vrf management
+!

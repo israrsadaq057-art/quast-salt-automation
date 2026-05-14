@@ -1,0 +1,490 @@
+# /srv/salt/quast/.github/workflows/salt_ci_cd.yml
+# GitHub Actions CI/CD Pipeline for QUAST University Salt Automation
+# Network Engineer: Israr Sadaq
+#
+# This workflow runs on every push and pull request
+# It validates ALL Salt configurations before deployment
+
+name: 🔧 QUAST Network Automation CI/CD
+
+# ============================================================
+# WHEN TO RUN THIS WORKFLOW
+# ============================================================
+on:
+  # Run on pushes to main and develop branches
+  push:
+    branches: [ main, develop, staging ]
+    paths:
+      - 'srv/salt/**'
+      - 'srv/pillar/**'
+      - '.github/workflows/**'
+  
+  # Run on pull requests to main
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'srv/salt/**'
+      - 'srv/pillar/**'
+  
+  # Run daily at 2 AM (detect configuration drift)
+  schedule:
+    - cron: '0 2 * * *'
+  
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'lab'
+        type: choice
+        options:
+          - lab
+          - staging
+          - production
+
+# ============================================================
+# ENVIRONMENT VARIABLES
+# ============================================================
+env:
+  SALT_VERSION: '3006.0'
+  PYTHON_VERSION: '3.11'
+
+# ============================================================
+# JOBS - RUN IN SEQUENCE
+# ============================================================
+jobs:
+
+  # ==========================================================
+  # JOB 1: LINTING (Syntax and Structure)
+  # ==========================================================
+  lint:
+    name: 🔍 Linting Salt States
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: 📦 Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml jinja2 salt==${{ env.SALT_VERSION }}
+      
+      - name: ✅ Validate YAML syntax
+        run: |
+          echo "=========================================="
+          echo "Validating YAML syntax in all .sls files"
+          echo "=========================================="
+          
+          FAILED=0
+          for file in $(find srv/salt -name "*.sls" -type f); do
+            echo -n "Checking $file... "
+            python3 -c "
+import yaml
+with open('$file', 'r') as f:
+    try:
+        yaml.safe_load(f)
+        print('✅ PASS')
+    except yaml.YAMLError as e:
+        print(f'❌ FAIL: {e}')
+        exit(1)
+" || FAILED=1
+          done
+          
+          for file in $(find srv/pillar -name "*.sls" -type f); do
+            echo -n "Checking $file... "
+            python3 -c "
+import yaml
+with open('$file', 'r') as f:
+    try:
+        yaml.safe_load(f)
+        print('✅ PASS')
+    except yaml.YAMLError as e:
+        print(f'❌ FAIL: {e}')
+        exit(1)
+" || FAILED=1
+          done
+          
+          if [ $FAILED -eq 1 ]; then
+            echo "❌ YAML validation FAILED"
+            exit 1
+          fi
+          echo "✅ All YAML files are valid!"
+      
+      - name: 🔍 Validate Jinja2 templates
+        run: |
+          echo "=========================================="
+          echo "Validating Jinja2 templates"
+          echo "=========================================="
+          
+          for template in $(find srv/salt -name "*.j2" -type f); do
+            echo -n "Checking $template... "
+            python3 -c "
+from jinja2 import Template
+with open('$template', 'r') as f:
+    try:
+        Template(f.read())
+        print('✅ PASS')
+    except Exception as e:
+        print(f'❌ FAIL: {e}')
+        exit(1)
+" || exit 1
+          done
+          echo "✅ All Jinja2 templates are valid!"
+      
+      - name: 📋 Check Salt state structure
+        run: |
+          echo "=========================================="
+          echo "Checking Salt state structure"
+          echo "=========================================="
+          
+          # Check that all states have IDs
+          for file in $(find srv/salt -name "*.sls" -not -name "top.sls" -type f); do
+            echo -n "Checking $file has state IDs... "
+            if grep -q "^[a-z_-]*:$" "$file"; then
+              echo "✅ PASS"
+            else
+              echo "❌ FAIL - No state ID found"
+              exit 1
+            fi
+          done
+          echo "✅ All states have proper IDs!"
+
+  # ==========================================================
+  # JOB 2: PILLAR VALIDATION
+  # ==========================================================
+  pillar-validation:
+    name: 📊 Validate Pillar Data
+    runs-on: ubuntu-latest
+    needs: lint
+    timeout-minutes: 10
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: ✅ Validate pillar data completeness
+        run: |
+          echo "=========================================="
+          echo "Validating Pillar Data Completeness"
+          echo "=========================================="
+          
+          python3 << 'EOF'
+import yaml
+import os
+import sys
+
+# Load all pillar files
+pillar_data = {}
+pillar_dir = 'srv/pillar'
+
+for root, dirs, files in os.walk(pillar_dir):
+    for file in files:
+        if file.endswith('.sls'):
+            filepath = os.path.join(root, file)
+            try:
+                with open(filepath, 'r') as f:
+                    data = yaml.safe_load(f)
+                    if data:
+                        print(f"✅ Loaded: {filepath}")
+                        pillar_data.update(data)
+            except Exception as e:
+                print(f"❌ Failed to load {filepath}: {e}")
+                sys.exit(1)
+
+# Check critical pillars exist
+required_pillars = [
+    'vlans',
+    'ntp',
+    'dns',
+    'syslog',
+    'snmp',
+    'aaa'
+]
+
+for pillar in required_pillars:
+    if pillar not in pillar_data and pillar not in str(pillar_data):
+        print(f"⚠️  Warning: {pillar} pillar not found")
+
+print(f"✅ Loaded {len(pillar_data)} pillar keys")
+print("✅ Pillar validation complete")
+EOF
+      
+      - name: 📊 Check VLAN ranges
+        run: |
+          echo "=========================================="
+          echo "Validating VLAN configuration"
+          echo "=========================================="
+          
+          python3 << 'EOF'
+import yaml
+import sys
+
+with open('srv/pillar/quast/network/global/vlans.sls', 'r') as f:
+    data = yaml.safe_load(f)
+
+# Check for duplicate VLAN IDs
+all_vlans = {}
+for category in ['infrastructure_vlans', 'academic_vlans', 'research_vlans', 'residence_vlans', 'datacenter_vlans']:
+    if category in data:
+        for vlan_id in data[category].keys():
+            if vlan_id in all_vlans:
+                print(f"❌ Duplicate VLAN ID {vlan_id} found in {category}")
+                sys.exit(1)
+            all_vlans[vlan_id] = category
+
+print(f"✅ No duplicate VLAN IDs found")
+print(f"✅ Total VLANs configured: {len(all_vlans)}")
+EOF
+
+  # ==========================================================
+  # JOB 3: DRY-RUN TEST (Test what would change)
+  # ==========================================================
+  dry-run:
+    name: 🧪 Dry-Run State Application
+    runs-on: ubuntu-latest
+    needs: pillar-validation
+    timeout-minutes: 20
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Install Salt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y salt-master salt-minion
+          sudo systemctl stop salt-master salt-minion
+      
+      - name: 🔧 Setup Salt directories
+        run: |
+          sudo mkdir -p /srv/salt
+          sudo mkdir -p /srv/pillar
+          sudo cp -r srv/salt/* /srv/salt/
+          sudo cp -r srv/pillar/* /srv/pillar/
+      
+      - name: 🧪 Run dry-run on core switches
+        run: |
+          echo "=========================================="
+          echo "Dry-run on Core Switch configuration"
+          echo "=========================================="
+          
+          # This is a dry-run - no actual changes
+          sudo salt-call --local state.apply quast.network.core.vlans test=True
+          
+      - name: 🧪 Run dry-run on distribution switches
+        run: |
+          echo "=========================================="
+          echo "Dry-run on Distribution Switch configuration"
+          echo "=========================================="
+          
+          sudo salt-call --local state.apply quast.network.distribution.base test=True
+      
+      - name: 🧪 Test Jinja2 template rendering
+        run: |
+          echo "=========================================="
+          echo "Testing Jinja2 template rendering"
+          echo "=========================================="
+          
+          python3 << 'EOF'
+from jinja2 import Environment, FileSystemLoader
+import yaml
+import sys
+
+# Load test pillar data
+with open('srv/pillar/quast/network/global/vlans.sls', 'r') as f:
+    test_pillar = yaml.safe_load(f)
+
+# Test each template
+template_dir = 'srv/salt/quast/templates'
+env = Environment(loader=FileSystemLoader(template_dir))
+
+templates = [
+    'cisco/vlans.j2',
+    'cisco/ntp.j2',
+    'cisco/ospf.j2',
+]
+
+for template_path in templates:
+    try:
+        template = env.get_template(template_path)
+        result = template.render(vlans=test_pillar.get('infrastructure_vlans', {}))
+        print(f"✅ Template renders: {template_path}")
+    except Exception as e:
+        print(f"❌ Template failed: {template_path} - {e}")
+        sys.exit(1)
+
+print("✅ All templates render successfully")
+EOF
+
+  # ==========================================================
+  # JOB 4: SECURITY SCANNING
+  # ==========================================================
+  security-scan:
+    name: 🔒 Security Scanning
+    runs-on: ubuntu-latest
+    needs: dry-run
+    timeout-minutes: 10
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔍 Check for hardcoded secrets
+        run: |
+          echo "=========================================="
+          echo "Scanning for hardcoded secrets"
+          echo "=========================================="
+          
+          # Check for common secret patterns
+          echo "Checking for passwords..."
+          if grep -r "password" srv/salt/ --include="*.sls" | grep -v "pillar" | grep -v "#"; then
+            echo "⚠️  WARNING: Possible hardcoded password found in state files"
+            echo "Passwords should be in pillars, not states!"
+          else
+            echo "✅ No hardcoded passwords found in states"
+          fi
+          
+          echo "Checking for private keys..."
+          if grep -r "BEGIN.*PRIVATE KEY" srv/; then
+            echo "❌ Private keys found in repository!"
+            exit 1
+          else
+            echo "✅ No private keys found"
+          fi
+      
+      - name: 🛡️ Check for risky Salt practices
+        run: |
+          echo "=========================================="
+          echo "Checking for risky practices"
+          echo "=========================================="
+          
+          # Check for cmd.run without unless
+          if grep -r "cmd.run" srv/salt/ --include="*.sls" | grep -v "unless" | grep -v "#"; then
+            echo "⚠️  WARNING: cmd.run found without unless condition"
+            echo "This could run commands multiple times"
+          else
+            echo "✅ cmd.run properly uses unless conditions"
+          fi
+          
+          # Check for hardcoded IPs that should be in pillars
+          if grep -rE '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' srv/salt/ --include="*.sls" | grep -v "pillar"; then
+            echo "⚠️  WARNING: Hardcoded IP addresses found in states"
+          else
+            echo "✅ No hardcoded IP addresses found"
+          fi
+
+  # ==========================================================
+  # JOB 5: DEPLOYMENT (ONLY ON MAIN BRANCH)
+  # ==========================================================
+  deploy:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: security-scan
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    timeout-minutes: 30
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔑 Setup SSH key for Salt Master
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SALT_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+      
+      - name: 📁 Sync Salt files to Master
+        run: |
+          rsync -avz --delete srv/salt/ ${{ secrets.SALT_MASTER_IP }}:/srv/salt/
+          rsync -avz --delete srv/pillar/ ${{ secrets.SALT_MASTER_IP }}:/srv/pillar/
+      
+      - name: 🔄 Refresh pillar data on master
+        run: |
+          ssh ${{ secrets.SALT_MASTER_IP }} "sudo salt '*' saltutil.refresh_pillar"
+      
+      - name: 🧪 Run highstate on lab environment first
+        run: |
+          ssh ${{ secrets.SALT_MASTER_IP }} "sudo salt 'lab-*' state.apply test=True"
+      
+      - name: ✅ If lab passes, deploy to production
+        run: |
+          echo "=========================================="
+          echo "Deploying to PRODUCTION"
+          echo "=========================================="
+          
+          ssh ${{ secrets.SALT_MASTER_IP }} "sudo salt 'quast-core-*' state.apply"
+          ssh ${{ secrets.SALT_MASTER_IP }} "sudo salt 'quast-dist-*' state.apply"
+          ssh ${{ secrets.SALT_MASTER_IP }} "sudo salt 'quast-acc-*' state.apply --batch 10"
+      
+      - name: 📢 Send deployment notification
+        run: |
+          echo "=========================================="
+          echo "Deployment Complete!"
+          echo "=========================================="
+          echo "✅ QUAST network automation deployed"
+          echo "📅 Time: $(date)"
+          echo "👤 Deployed by: ${{ github.actor }}"
+          echo "📝 Commit: ${{ github.sha }}"
+
+  # ==========================================================
+  # JOB 6: POST-DEPLOYMENT VERIFICATION
+  # ==========================================================
+  verify:
+    name: ✅ Verify Deployment
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔍 Verify core switches are responding
+        run: |
+          echo "=========================================="
+          echo "Verifying Core Switches"
+          echo "=========================================="
+          
+          ssh ${{ secrets.SALT_MASTER_IP }} "sudo salt 'quast-core-*' test.ping"
+      
+      - name: 📊 Verify VLAN configuration
+        run: |
+          echo "=========================================="
+          echo "Verifying VLAN Configuration"
+          echo "=========================================="
+          
+          ssh ${{ secrets.SALT_MASTER_IP }} "sudo salt 'quast-dist-cs' cmd.run 'show vlan brief | include MGMT'"
+      
+      - name: ✅ All verification passed
+        run: |
+          echo "✅ QUAST University network automation SUCCESSFUL!"
+          echo "All devices configured correctly."
+
+# ============================================================
+# NOTIFICATIONS
+# ============================================================
+notifications:
+  - name: Slack Notification
+    uses: slackapi/slack-github-action@v1.25
+    if: always()
+    with:
+      payload: |
+        {
+          "text": "QUAST Network Automation - ${{ job.status }}\nBranch: ${{ github.ref_name }}\nCommit: ${{ github.sha }}"
+        }
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

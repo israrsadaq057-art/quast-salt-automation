@@ -1,0 +1,21 @@
+{# /srv/salt/quast/templates/cisco/access/spanning_tree.j2 #}
+! ============================================
+! Spanning Tree Protocol
+! Prevents loops in the network
+! ============================================
+!
+spanning-tree mode {{ mode }}
+spanning-tree extend system-id
+!
+{% if portfast_default %}
+spanning-tree portfast default
+{% endif %}
+!
+{% if bpduguard_default %}
+spanning-tree portfast bpduguard default
+{% endif %}
+!
+! Root guard on uplink (prevents rogue switches becoming root)
+interface {{ uplink_port }}
+ spanning-tree guard root
+!

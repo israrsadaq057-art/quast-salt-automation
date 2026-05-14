@@ -1,0 +1,32 @@
+{# /srv/salt/quast/templates/fortinet/policies.j2 #}
+! ============================================
+! Firewall Policies
+! Processed in order - First match wins
+! ============================================
+
+config firewall policy
+    {% for policy in policies %}
+    edit {{ policy.id }}
+        set name "{{ policy.name }}"
+        set srcintf "{{ policy.from }}"
+        set dstintf "{{ policy.to }}"
+        set srcaddr "{{ policy.source }}"
+        set dstaddr "{{ policy.destination }}"
+        set action {{ policy.action }}
+        set schedule "always"
+        set service "{{ policy.service }}"
+        {% if policy.log == 'enable' %}
+        set logtraffic all
+        {% endif %}
+        {% if policy.nat == 'enable' %}
+        set nat enable
+        {% endif %}
+        {% if policy.application_list is defined %}
+        set application-list "{{ policy.application_list }}"
+        {% endif %}
+        {% if policy.ssl_ssh_profile is defined %}
+        set ssl-ssh-profile "{{ policy.ssl_ssh_profile }}"
+        {% endif %}
+    next
+    {% endfor %}
+end

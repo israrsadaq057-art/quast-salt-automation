@@ -1,0 +1,21 @@
+{# /srv/salt/quast/templates/cisco/ospf_auth.j2 #}
+! ============================================
+! OSPF Authentication (MD5)
+! ============================================
+!
+key chain OSPF-KEY
+  key {{ auth_key_id }}
+    key-string {{ auth_key }}
+!
+interface port-channel100
+  ip ospf authentication message-digest
+  ip ospf message-digest-key {{ auth_key_id }} md5 {{ auth_key }}
+!
+interface port-channel101
+  ip ospf authentication message-digest
+  ip ospf message-digest-key {{ auth_key_id }} md5 {{ auth_key }}
+!
+interface Ethernet1/48
+  ip ospf authentication message-digest
+  ip ospf message-digest-key {{ auth_key_id }} md5 {{ auth_key }}
+!
