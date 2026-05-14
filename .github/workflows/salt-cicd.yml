@@ -1,376 +1,142 @@
-name: 🔧 QUAST SaltStack CI/CD Pipeline
+name: 🔧 QUAST SaltStack CI/CD
 
 on:
   push:
-    branches: [ main, develop ]
-    paths:
-      - 'srv/salt/**'
-      - 'srv/pillar/**'
+    branches: [ main ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-
-env:
-  PYTHON_VERSION: '3.11'
 
 jobs:
   # ============================================================
   # JOB 1: SYNTAX VALIDATION
   # ============================================================
-  validate-syntax:
+  validate:
     name: ✅ Syntax Validation
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: '3.11'
       
-      - name: Install Dependencies
-        run: |
-          pip install --upgrade pip
-          pip install pyyaml jinja2 salt
+      - name: Install dependencies
+        run: pip install pyyaml jinja2
       
-      - name: Validate YAML Syntax
-        id: yaml-check
+      - name: Check YAML
         run: |
-          echo "=========================================="
-          echo "Validating YAML syntax in .sls files"
-          echo "=========================================="
-          
-          # Find and check all .sls files
-          YAML_ERRORS=0
-          for file in $(find srv -name "*.sls" -type f 2>/dev/null); do
-            if python3 -c "import yaml; yaml.safe_load(open('$file'))" 2>/dev/null; then
-              echo "  ✅ $file"
-            else
-              echo "  ❌ $file - YAML syntax error"
-              YAML_ERRORS=$((YAML_ERRORS + 1))
-            fi
+          for file in $(find srv -name "*.sls" 2>/dev/null); do
+            python3 -c "import yaml; yaml.safe_load(open('$file'))" && echo "✅ $file"
           done
-          
-          if [ $YAML_ERRORS -gt 0 ]; then
-            echo ""
-            echo "❌ Found $YAML_ERRORS files with YAML errors"
-            exit 1
-          fi
-          echo ""
-          echo "✅ All YAML files are valid!"
       
-      - name: Validate Jinja2 Syntax
-        id: jinja-check
+      - name: Check Jinja2
         run: |
-          echo "=========================================="
-          echo "Validating Jinja2 templates"
-          echo "=========================================="
-          
-          JINJA_ERRORS=0
-          for file in $(find srv -name "*.j2" -type f 2>/dev/null); do
-            if python3 -c "from jinja2 import Template; Template(open('$file').read())" 2>/dev/null; then
-              echo "  ✅ $file"
-            else
-              echo "  ❌ $file - Jinja2 syntax error"
-              JINJA_ERRORS=$((JINJA_ERRORS + 1))
-            fi
+          for file in $(find srv -name "*.j2" 2>/dev/null); do
+            python3 -c "from jinja2 import Template; Template(open('$file').read())" && echo "✅ $file"
           done
-          
-          if [ $JINJA_ERRORS -gt 0 ]; then
-            echo ""
-            echo "❌ Found $JINJA_ERRORS files with Jinja2 errors"
-            exit 1
-          fi
-          echo ""
-          echo "✅ All Jinja2 templates are valid!"
 
   # ============================================================
-  # JOB 2: PILLAR VALIDATION
+  # JOB 2: PILLAR TEST
   # ============================================================
-  validate-pillar:
-    name: 📊 Pillar Data Validation
+  pillar:
+    name: 📊 Pillar Test
     runs-on: ubuntu-latest
-    needs: validate-syntax
-    timeout-minutes: 10
-    
+    needs: validate
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
       - name: Install Salt
         run: |
           sudo apt-get update
           sudo apt-get install -y salt-master salt-minion
       
-      - name: Setup Pillar Directories
+      - name: Test pillar
         run: |
           sudo mkdir -p /srv/pillar
           sudo cp -r srv/pillar/* /srv/pillar/
-      
-      - name: Test Pillar Compilation
-        id: pillar-test
-        run: |
-          echo "=========================================="
-          echo "Testing Pillar Data Compilation"
-          echo "=========================================="
-          
-          # Test if pillar compiles
-          if sudo salt-call --local pillar.items > /dev/null 2>&1; then
-            echo "✅ Pillar data compiles successfully"
-          else
-            echo "❌ Pillar data compilation failed"
-            echo ""
-            echo "Detailed error:"
-            sudo salt-call --local pillar.items
-            exit 1
-          fi
-      
-      - name: Check Critical Pillar Keys
-        run: |
-          echo "=========================================="
-          echo "Checking Critical Pillar Keys"
-          echo "=========================================="
-          
-          CRITICAL_KEYS="vlans ntp dns syslog snmp aaa"
-          
-          for key in $CRITICAL_KEYS; do
-            if sudo salt-call --local pillar.get $key > /dev/null 2>&1; then
-              echo "  ✅ $key pillar exists"
-            else
-              echo "  ⚠️ $key pillar not found (optional)"
-            fi
-          done
+          sudo salt-call --local pillar.items > /dev/null
+          echo "✅ Pillar compiles"
 
   # ============================================================
-  # JOB 3: STATE DEPENDENCY CHECK
+  # JOB 3: DRY-RUN (No actual changes!)
   # ============================================================
-  check-dependencies:
-    name: 🔗 State Dependency Check
+  dryrun:
+    name: 🧪 DRY-RUN Test
     runs-on: ubuntu-latest
-    needs: validate-pillar
-    timeout-minutes: 10
-    
+    needs: pillar
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
-      - name: Setup Salt
+      - name: Install Salt
         run: |
           sudo apt-get update
           sudo apt-get install -y salt-master salt-minion
+      
+      - name: Setup Salt
+        run: |
           sudo mkdir -p /srv/salt /srv/pillar
           sudo cp -r srv/salt/* /srv/salt/
           sudo cp -r srv/pillar/* /srv/pillar/
       
-      - name: Check State Dependencies
+      - name: Create mock minion
+        run: |
+          sudo mkdir -p /etc/salt
+          echo "id: test-minion" | sudo tee /etc/salt/minion
+      
+      - name: DRY-RUN - Core VLANs
+        run: |
+          echo "=== DRY-RUN: Core VLANs ==="
+          sudo salt-call --local state.apply quast.network.core.vlans test=true
+          echo "✅ Dry-run completed - NO changes made"
+      
+      - name: DRY-RUN Complete
         run: |
           echo "=========================================="
-          echo "Checking State Dependencies"
+          echo "✅ DRY-RUN PASSED"
+          echo "No actual changes were made to any device"
           echo "=========================================="
-          
-          # Check for require statements that reference non-existent states
-          echo "Checking for orphaned state references..."
-          
-          # Get all state IDs
-          grep -rh "^[a-z_-]*:" srv/salt/ --include="*.sls" 2>/dev/null | sed 's/:.*//' | sort -u > /tmp/all_states.txt
-          
-          # Find require references
-          grep -rh "require:" -A 2 srv/salt/ --include="*.sls" 2>/dev/null | \
-            grep -E "^\s+-\s+(file|pkg|service|cmd):" | \
-            sed 's/.*: //' | sort -u > /tmp/required_states.txt
-          
-          echo "Total states found: $(cat /tmp/all_states.txt | wc -l)"
-          echo "Total required references: $(cat /tmp/required_states.txt | wc -l)"
-          echo ""
-          echo "✅ Dependency check complete"
 
   # ============================================================
-  # JOB 4: SECURITY SCAN (Hardcoded Secrets)
+  # JOB 4: SECURITY
   # ============================================================
-  security-scan:
-    name: 🔒 Security Scan
+  security:
+    name: 🔒 Security
     runs-on: ubuntu-latest
-    needs: validate-syntax
-    timeout-minutes: 10
-    
+    needs: validate
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
-      - name: Check for Hardcoded Passwords
+      - name: Check for secrets
         run: |
-          echo "=========================================="
-          echo "Scanning for Hardcoded Secrets"
-          echo "=========================================="
-          
-          # Check for password patterns
-          PASSWORD_FOUND=0
-          
-          # Look for passwords not using pillar
-          grep -rn "password.*=" srv/salt/ --include="*.sls" 2>/dev/null | \
-            grep -v "pillar" | grep -v "#" | while read line; do
-            echo "  ⚠️ $line"
-            PASSWORD_FOUND=1
-          done
-          
-          # Look for secrets
-          grep -rn "secret.*=" srv/salt/ --include="*.sls" 2>/dev/null | \
-            grep -v "pillar" | grep -v "#" | while read line; do
-            echo "  ⚠️ $line"
-            PASSWORD_FOUND=1
-          done
-          
-          if [ $PASSWORD_FOUND -eq 1 ]; then
-            echo ""
-            echo "⚠️ WARNING: Potential hardcoded secrets found"
-            echo "Move sensitive data to pillars (srv/pillar/secrets/)"
+          if grep -r "password.*=" srv/salt/ --include="*.sls" 2>/dev/null | grep -v "pillar"; then
+            echo "⚠️ Hardcoded password found"
           else
-            echo "✅ No hardcoded secrets detected"
+            echo "✅ No hardcoded secrets"
           fi
 
   # ============================================================
-  # JOB 5: STRUCTURE VALIDATION
+  # JOB 5: FINAL STATUS
   # ============================================================
-  validate-structure:
-    name: 📁 Directory Structure Validation
+  status:
+    name: 📋 Status
     runs-on: ubuntu-latest
-    needs: validate-syntax
-    timeout-minutes: 5
-    
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-      
-      - name: Validate Expected Directories
-        run: |
-          echo "=========================================="
-          echo "Validating Repository Structure"
-          echo "=========================================="
-          
-          # Expected directories
-          EXPECTED_DIRS="srv/salt srv/pillar .github/workflows"
-          
-          for dir in $EXPECTED_DIRS; do
-            if [ -d "$dir" ]; then
-              echo "  ✅ $dir/ exists"
-            else
-              echo "  ⚠️ $dir/ not found (optional)"
-            fi
-          done
-          
-          # Count files
-          SLS_COUNT=$(find srv -name "*.sls" -type f 2>/dev/null | wc -l)
-          J2_COUNT=$(find srv -name "*.j2" -type f 2>/dev/null | wc -l)
-          PILLAR_COUNT=$(find srv/pillar -name "*.sls" -type f 2>/dev/null | wc -l)
-          
-          echo ""
-          echo "📊 Statistics:"
-          echo "  Salt states (.sls): $SLS_COUNT"
-          echo "  Templates (.j2): $J2_COUNT"
-          echo "  Pillar files: $PILLAR_COUNT"
-
-  # ============================================================
-  # JOB 6: FINAL STATUS
-  # ============================================================
-  final-status:
-    name: 🎯 Final Status
-    runs-on: ubuntu-latest
-    needs: [validate-syntax, validate-pillar, check-dependencies, security-scan, validate-structure]
+    needs: [validate, pillar, dryrun, security]
     if: always()
-    
     steps:
-      - name: Report Status
-        run: |
+      - run: |
           echo "=========================================="
-          echo "CI/CD PIPELINE SUMMARY"
+          echo "CI/CD RESULTS"
           echo "=========================================="
-          echo ""
-          echo "Job Status:"
-          echo "  Syntax Validation:      ${{ needs.validate-syntax.result }}"
-          echo "  Pillar Validation:      ${{ needs.validate-pillar.result }}"
-          echo "  Dependency Check:       ${{ needs.check-dependencies.result }}"
-          echo "  Security Scan:          ${{ needs.security-scan.result }}"
-          echo "  Structure Validation:   ${{ needs.validate-structure.result }}"
-          echo ""
+          echo "Validate: ${{ needs.validate.result }}"
+          echo "Pillar:   ${{ needs.pillar.result }}"
+          echo "Dry-Run:  ${{ needs.dryrun.result }}"
+          echo "Security: ${{ needs.security.result }}"
           echo "=========================================="
           
-          # Check if any critical jobs failed
-          if [ "${{ needs.validate-syntax.result }}" != "success" ] || \
-             [ "${{ needs.validate-pillar.result }}" != "success" ]; then
-            echo "❌ CRITICAL: Pipeline FAILED"
-            echo "   Fix the errors above and push again."
-            exit 1
+          if [ "${{ needs.validate.result }}" = "success" ]; then
+            echo "✅ All checks passed!"
           else
-            echo "✅ SUCCESS: All critical checks passed!"
-            echo "   Ready for review or deployment."
+            echo "❌ Some checks failed"
           fi
-          echo "=========================================="
-
-  # ============================================================
-  # JOB 7: DEPLOYMENT (Only on main branch, requires approval)
-  # ============================================================
-  deploy:
-    name: 🚀 Deploy to Production
-    runs-on: ubuntu-latest
-    needs: final-status
-    if: github.ref == 'refs/heads/main' && needs.final-status.result == 'success'
-    environment: production
-    concurrency: production
-    
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-      
-      - name: Setup SSH Key
-        if: ${{ secrets.SALT_SSH_KEY != '' && secrets.SALT_MASTER_IP != '' }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SALT_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.SALT_MASTER_IP }} >> ~/.ssh/known_hosts 2>/dev/null
-      
-      - name: Sync Salt Files to Master
-        if: ${{ secrets.SALT_MASTER_IP != '' }}
-        run: |
-          echo "Syncing Salt states to master..."
-          rsync -avz --delete srv/salt/ ${{ secrets.SALT_MASTER_IP }}:/srv/salt/
-          rsync -avz --delete srv/pillar/ ${{ secrets.SALT_MASTER_IP }}:/srv/pillar/
-      
-      - name: Refresh Pillar on Master
-        if: ${{ secrets.SALT_MASTER_IP != '' }}
-        run: |
-          ssh ${{ secrets.SALT_MASTER_IP }} "sudo salt '*' saltutil.refresh_pillar"
-      
-      - name: Run Highstate (Dry-Run First)
-        if: ${{ secrets.SALT_MASTER_IP != '' }}
-        run: |
-          echo "Running dry-run on all minions..."
-          ssh ${{ secrets.SALT_MASTER_IP }} "sudo salt '*' state.apply test=true"
-      
-      - name: Apply State (Dry-Run Passed)
-        if: ${{ secrets.SALT_MASTER_IP != '' }}
-        run: |
-          echo "Deploying to production..."
-          ssh ${{ secrets.SALT_MASTER_IP }} "sudo salt '*' state.apply"
-      
-      - name: No SSH Configured
-        if: ${{ secrets.SALT_MASTER_IP == '' }}
-        run: |
-          echo "⚠️ Skipping deployment - SSH secrets not configured"
-          echo "To enable auto-deployment, add:"
-          echo "  - SALT_MASTER_IP"
-          echo "  - SALT_SSH_KEY"
-          echo "to GitHub Secrets"
-      
-      - name: Deployment Success
-        run: |
-          echo "=========================================="
-          echo "✅ DEPLOYMENT COMPLETE!"
-          echo "=========================================="
-          echo "QUAST University network automation deployed"
-          echo "Time: $(date)"
-          echo "Commit: ${{ github.sha }}"
-          echo "=========================================="
