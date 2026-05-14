@@ -1,0 +1,22 @@
+{# /srv/salt/quast/templates/cisco/access/port_security.j2 #}
+! ============================================
+! Port Security - Prevent Unauthorized Devices
+! ============================================
+!
+{% for port in ports %}
+interface {{ port.name }}
+ switchport port-security
+ switchport port-security maximum {{ max_mac }}
+ switchport port-security violation {{ violation }}
+ switchport port-security aging time 60
+ switchport port-security aging type inactivity
+ {% if port.sticky_mac is defined %}
+ switchport port-security mac-address sticky
+ {% endif %}
+!
+{% endfor %}
+!
+! Global port security settings
+port-security aging time 60
+port-security aging type inactivity
+!

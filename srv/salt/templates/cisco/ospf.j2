@@ -1,0 +1,31 @@
+{# /srv/salt/quast/templates/cisco/ospf.j2 #}
+! ============================================
+! OSPF Configuration
+! Network Engineer: Israr Sadaq
+! ============================================
+!
+feature ospf
+!
+router ospf {{ process_id }}
+  router-id {{ router_id }}
+  !
+  ! Advertise networks
+  {% for network in networks %}
+  network {{ network.prefix }} {{ network.wildcard }} area {{ network.area }}
+  {% endfor %}
+  !
+  ! Passive interfaces (no OSPF neighbors here)
+  {% for intf in passive_interfaces %}
+  passive-interface {{ intf }}
+  {% endfor %}
+  !
+  {% for route in redistribute %}
+  redistribute {{ route }} route-map {{ route | upper }}_TO_OSPF
+  {% endfor %}
+  !
+  ! Timers for faster convergence
+  timers throttle spf 200 1000 10000
+  timers lsa arrival 1000
+  !
+  maximum-paths 4
+  !

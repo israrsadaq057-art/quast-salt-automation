@@ -1,0 +1,37 @@
+{# /srv/salt/quast/templates/cisco/aaa.j2 #}
+! ============================================
+! AAA / RADIUS Configuration
+! ============================================
+!
+! RADIUS Servers
+radius server RADIUS-PRIMARY
+ address ipv4 {{ radius_primary }} auth-port 1812 acct-port 1813
+ key {{ radius_key }}
+ timeout {{ radius_timeout }}
+ retransmit {{ radius_retries }}
+!
+radius server RADIUS-SECONDARY
+ address ipv4 {{ radius_secondary }} auth-port 1812 acct-port 1813
+ key {{ radius_key }}
+ timeout {{ radius_timeout }}
+ retransmit {{ radius_retries }}
+!
+! AAA Configuration
+aaa new-model
+!
+aaa authentication login default group radius local
+aaa authentication enable default group radius enable
+aaa authorization exec default group radius local
+aaa accounting exec default start-stop group radius
+aaa accounting commands 15 default start-stop group radius
+!
+! Apply to VTY lines
+line vty 0 4
+ login authentication default
+ authorization exec default
+ accounting exec default
+ transport input ssh
+!
+! Local user backup (in case RADIUS fails)
+username netadmin privilege 15 secret {{ pillar['secrets']['local_backup_password'] }}
+!

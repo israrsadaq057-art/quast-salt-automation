@@ -1,0 +1,13 @@
+{# /srv/salt/quast/templates/cisco/access/storm_control.j2 #}
+! ============================================
+! Storm Control - Prevent Broadcast Storms
+! ============================================
+!
+{% for port in ports %}
+interface {{ port.name }}
+ storm-control broadcast level {{ broadcast_level }}
+ storm-control multicast level {{ multicast_level }}
+ storm-control action shutdown
+!
+{% endfor %}
+!

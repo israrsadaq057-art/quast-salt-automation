@@ -1,0 +1,16 @@
+{# /srv/salt/quast/templates/cisco/ospf_interfaces.j2 #}
+! ============================================
+! OSPF Interface Parameters
+! ============================================
+!
+{% for intf in uplink_interfaces %}
+interface {{ intf.name }}
+  ip ospf network point-to-point
+  ip ospf cost {{ intf.ospf_cost }}
+  ip ospf priority {{ intf.ospf_priority }}
+  ip ospf hello-interval 10
+  ip ospf dead-interval 40
+  ip ospf retransmit-interval 5
+  ip ospf transmit-delay 1
+!
+{% endfor %}

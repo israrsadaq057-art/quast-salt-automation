@@ -1,0 +1,24 @@
+{# /srv/salt/quast/templates/fortinet/interfaces.j2 #}
+! ============================================
+! Interface Configuration
+! ============================================
+
+config system interface
+    {% for name, config in interfaces.items() %}
+    edit "{{ name }}"
+        set vdom "root"
+        set mode {{ config.mode }}
+        set ip {{ config.ip }}
+        set allowaccess {{ config.allowaccess | join(' ') }}
+        {% if config.description is defined %}
+        set description "{{ config.description }}"
+        {% endif %}
+        set role {{ config.role }}
+    next
+    {% endfor %}
+end
+
+config system global
+    set hostname {{ grains.id }}
+    set timezone 44
+end

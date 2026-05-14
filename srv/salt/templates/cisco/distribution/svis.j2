@@ -1,0 +1,19 @@
+{# /srv/salt/quast/templates/cisco/distribution/svis.j2 #}
+! ============================================
+! SVI Configuration with HSRP
+! Default gateways for all VLANs
+! ============================================
+!
+{% for vlan_id, vlan_data in vlans.items() %}
+interface Vlan{{ vlan_id }}
+ description {{ vlan_data.description }}
+ ip address {{ vlan_data.gateway }} {{ vlan_data.subnet | ipv4_mask }}
+ no shutdown
+ standby version 2
+ standby {{ hsrp_group }} ip {{ vlan_data.gateway }}
+ standby {{ hsrp_group }} priority {{ hsrp_priority }}
+ standby {{ hsrp_group }} preempt delay minimum 60
+ standby {{ hsrp_group }} authentication md5 key-string {{ pillar['secrets']['hsrp_auth_key'] }}
+!
+{% endfor %}
+!

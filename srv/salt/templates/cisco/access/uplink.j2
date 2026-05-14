@@ -1,0 +1,13 @@
+{# /srv/salt/quast/templates/cisco/access/uplink.j2 #}
+! ============================================
+! Uplink to Distribution Switch
+! ============================================
+!
+interface {{ uplink_port }}
+ description *** Uplink to Distribution ***
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40,50,100,101,200,300,301,400
+ speed {{ uplink_speed }}
+ duplex full
+ no shutdown
+!

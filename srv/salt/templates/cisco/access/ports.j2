@@ -1,0 +1,23 @@
+{# /srv/salt/quast/templates/cisco/access/ports.j2 #}
+! ============================================
+! Port Configuration
+! ============================================
+!
+{% for port in ports %}
+interface {{ port.name }}
+ description {{ port.description }}
+ switchport mode access
+ switchport access vlan {{ port.vlan | default(default_vlan) }}
+ {% if port.voice_vlan is defined %}
+ switchport voice vlan {{ port.voice_vlan }}
+ {% endif %}
+ spanning-tree portfast
+ no shutdown
+!
+{% endfor %}
+!
+! Default configuration for unused ports
+interface range GigabitEthernet1/0/{{ ports|length + 1 }}-48
+ description *** Unused Port - Shutdown ***
+ shutdown
+!

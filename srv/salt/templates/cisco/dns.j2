@@ -1,0 +1,18 @@
+{# /srv/salt/quast/templates/cisco/dns.j2 #}
+! ============================================
+! DNS Configuration
+! ============================================
+!
+ip domain-name {{ domain_name }}
+!
+{% for server in dns_servers %}
+ip name-server {{ server }}
+{% endfor %}
+!
+{% for domain in search_domains %}
+ip domain-list {{ domain }}
+{% endfor %}
+!
+ip dns server
+ip domain-lookup
+!

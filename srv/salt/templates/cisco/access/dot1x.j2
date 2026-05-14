@@ -1,0 +1,43 @@
+{# /srv/salt/quast/templates/cisco/access/dot1x.j2 #}
+! ============================================
+! 802.1X Authentication
+! Students must login before accessing network
+! ============================================
+!
+! RADIUS Servers
+radius server RADIUS-PRIMARY
+ address ipv4 {{ radius_primary }} auth-port 1812 acct-port 1813
+ key {{ radius_key }}
+!
+radius server RADIUS-SECONDARY
+ address ipv4 {{ radius_secondary }} auth-port 1812 acct-port 1813
+ key {{ radius_key }}
+!
+! AAA Configuration
+aaa new-model
+aaa authentication dot1x default group radius
+aaa authorization network default group radius
+aaa accounting dot1x default start-stop group radius
+!
+! 802.1X Globally
+dot1x system-auth-control
+!
+! Authentication Fail VLAN (isolated)
+vlan {{ auth_fail_vlan }}
+ name AUTH-FAIL
+!
+! Guest VLAN (limited internet)
+vlan {{ guest_vlan }}
+ name GUEST
+!
+! Apply to user ports
+{% for port in ports if port.vlan == 300 %}
+interface {{ port.name }}
+ authentication port-control auto
+ authentication host-mode multi-host
+ dot1x pae authenticator
+ dot1x timeout tx-period 10
+ dot1x timeout supp-timeout 30
+!
+{% endfor %}
+!

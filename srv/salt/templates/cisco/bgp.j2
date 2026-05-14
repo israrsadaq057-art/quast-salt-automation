@@ -1,0 +1,48 @@
+{# /srv/salt/quast/templates/cisco/bgp.j2 #}
+! ============================================
+! BGP Configuration
+! AS 65001 - QUAST University
+! ============================================
+!
+feature bgp
+!
+router bgp {{ as_number }}
+  router-id {{ router_id }}
+  !
+  ! Address family IPv4 unicast
+  address-family ipv4 unicast
+    !
+    {% for neighbor in bgp_neighbors %}
+    neighbor {{ neighbor.ip }} remote-as {{ neighbor.remote_as }}
+    neighbor {{ neighbor.ip }} description {{ neighbor.description }}
+    neighbor {{ neighbor.ip }} password {{ neighbor.password }}
+    neighbor {{ neighbor.ip }} timers {{ neighbor.keepalive }} {{ neighbor.holdtime }}
+    neighbor {{ neighbor.ip }} advertisement-interval 30
+    neighbor {{ neighbor.ip }} activate
+    {% endfor %}
+    !
+    ! Networks to advertise to ISPs
+    {% for network in networks_to_advertise %}
+    network {{ network }}
+    {% endfor %}
+    !
+    ! Route maps for inbound filtering
+    neighbor 203.124.10.1 route-map BLOCK_BOGONS in
+    neighbor 203.124.11.1 route-map BLOCK_BOGONS in
+    !
+  exit-address-family
+!
+! Route map to block bogus prefixes
+route-map BLOCK_BOGONS deny 10
+  match ip address prefix-list BOGONS
+!
+! Prefix list of bogus networks to block
+ip prefix-list BOGONS seq 5 permit 0.0.0.0/8 le 32
+ip prefix-list BOGONS seq 10 permit 10.0.0.0/8 le 32
+ip prefix-list BOGONS seq 15 permit 127.0.0.0/8 le 32
+ip prefix-list BOGONS seq 20 permit 172.16.0.0/12 le 32
+ip prefix-list BOGONS seq 25 permit 192.168.0.0/16 le 32
+ip prefix-list BOGONS seq 30 permit 224.0.0.0/3 le 32
+!
+route-map BLOCK_BOGONS permit 100
+!

@@ -1,0 +1,16 @@
+{# /srv/salt/quast/templates/cisco/syslog.j2 #}
+! ============================================
+! Syslog Configuration
+! ============================================
+!
+{% for server in syslog_servers %}
+logging host {{ server }}
+{% endfor %}
+!
+logging facility {{ syslog_facility }}
+logging trap {{ syslog_severity }}
+logging source-interface Loopback0
+!
+service timestamps debug datetime localtime
+service timestamps log datetime localtime
+!

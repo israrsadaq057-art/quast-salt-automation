@@ -1,0 +1,18 @@
+{# /srv/salt/quast/templates/cisco/vpc_keepalive.j2 #}
+! ============================================
+! VPC Keepalive Configuration
+! Heartbeat between switches
+! ============================================
+!
+vrf context management
+  description Management VRF for OOB
+!
+interface mgmt0
+  vrf member management
+  ip address {{ mgmt_ip }} 255.255.255.0
+!
+! Keepalive interface is already configured in vpc domain
+! The actual keepalive uses the mgmt0 interface
+!
+ip route 0.0.0.0/0 {{ gateway }} vrf management
+!

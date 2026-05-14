@@ -1,0 +1,24 @@
+{# /srv/salt/quast/templates/fortinet/ha.j2 #}
+! ============================================
+! FortiGate HA Configuration
+! Network Engineer: Israr Sadaq
+! ============================================
+
+config system ha
+    set group-name "QUAST-HA"
+    set mode {{ ha_mode }}
+    set hbdev {{ heartbeat_interface }} 50
+    set session-pickup enable
+    set override disable
+    set priority {{ primary_priority }}
+    set monitor {{ monitor_interfaces | join(' ') }}
+    set authentication enable
+    set password {{ password }}
+    set unicast-hb enable
+    set unicast-hb-peerip
+    {% if grains.id.endswith('pri') %}
+    set unicast-hb-peerip {{ ha_config.get('peer_ip', '10.10.60.2') }}
+    {% else %}
+    set unicast-hb-peerip {{ ha_config.get('primary_ip', '10.10.60.1') }}
+    {% endif %}
+end

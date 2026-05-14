@@ -1,0 +1,21 @@
+{# /srv/salt/quast/templates/fortinet/ssl_inspect.j2 #}
+! ============================================
+! SSL Inspection Configuration
+! ============================================
+
+config firewall ssl-ssh-profile
+    edit "certificate-inspection"
+        set server-cert-mode re-sign
+        set cert {{ certificate }}
+        set untrusted-cert allow
+        {% for domain in exempt_domains %}
+        set exempt {{ domain }}
+        {% endfor %}
+    next
+end
+
+config firewall profile-group
+    edit "student-profile"
+        set ssl-ssh-profile "certificate-inspection"
+    next
+end

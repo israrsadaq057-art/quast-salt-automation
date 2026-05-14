@@ -1,0 +1,27 @@
+{# /srv/salt/quast/templates/cisco/wireless/ssids.j2 #}
+! ============================================
+! SSID Configuration
+! ============================================
+!
+{% for ssid in ssids %}
+wireless profile policy {{ ssid.name }}
+ description "{{ ssid.description }}"
+ vlan {{ ssid.vlan }}
+{% if ssid.security == 'wpa2-enterprise' %}
+ security dot1x authentication-list {{ ssid.name }}-LIST
+ security wpa akm 802.1x
+{% elif ssid.security == 'wpa2-personal' %}
+ security wpa akm psk set-key ascii {{ pillar['secrets']['wifi_psk_' + ssid.name] }}
+{% elif ssid.security == 'open' %}
+ no security
+{% endif %}
+!
+! SSID broadcast
+ssid {{ ssid.name }}
+ profile {{ ssid.name }}
+ broadcast-ssid
+{% if ssid.client_limit is defined %}
+ client vlan {{ ssid.vlan }} limit {{ ssid.client_limit }}
+{% endif %}
+!
+{% endfor %}

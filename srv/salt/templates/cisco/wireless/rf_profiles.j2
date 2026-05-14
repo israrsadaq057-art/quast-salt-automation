@@ -1,0 +1,21 @@
+{# /srv/salt/quast/templates/cisco/wireless/rf_profiles.j2 #}
+! ============================================
+! RF Profiles (Radio Frequency Management)
+! ============================================
+!
+{% for name, profile in rf_profiles.items() %}
+wireless rf-profile {{ name }}
+ description "{{ profile.description }}"
+{% if profile.type == 'high-density' %}
+ data-rates { 6.0 9.0 12.0 18.0 24.0 36.0 48.0 54.0 mandatory }
+ beacon-interval 100
+ dtim-period 2
+{% elif profile.type == 'low-density' %}
+ beacon-interval 200
+ dtim-period 1
+{% endif %}
+!
+ap dot11 5ghz rf-profile {{ name }}
+ap dot11 24ghz rf-profile {{ name }}
+!
+{% endfor %}

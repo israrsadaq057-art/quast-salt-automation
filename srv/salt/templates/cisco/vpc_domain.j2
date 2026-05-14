@@ -1,0 +1,25 @@
+{# /srv/salt/quast/templates/cisco/vpc_domain.j2 #}
+! ============================================
+! VPC Domain Configuration
+! Nexus 9508 Virtual Port Channel
+! Network Engineer: Israr Sadaq
+! ============================================
+!
+feature vpc
+feature lacp
+feature interface-vlan
+!
+vpc domain {{ domain_id }}
+  role priority {{ role_priority }}
+  peer-keepalive destination {{ peer_keepalive }} source {{ keepalive_ip }} vrf {{ vrf }}
+  auto-recovery
+  ip arp synchronize
+  peer-gateway
+  layer3 peer-router
+  !
+  ! Delay restore after reload (seconds)
+  delay restore 150
+  !
+  ! Virtual peer link (for dual-active detection)
+  virtual-peer-link destination {{ peer_keepalive }}
+!
