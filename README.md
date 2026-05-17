@@ -16,11 +16,6 @@ This repository contains the complete SaltStack automation for QUAST University 
 - **Wireless**: 500 APs + 2 WLCs
 - **Total Ports**: 15,000+
 
-### Quick Deploy
+### still working on it its pipeline is not completed yet
 
-```bash
-# Clone the repository
-git clone https://github.com/quast/salt-automation.git
-
-# Run full deployment
-sudo salt-run state.orchestrate quast.orchestration.full_deploy
+ 
